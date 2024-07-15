@@ -126,9 +126,10 @@ int main(int argc, char* argv[])
     {
         // 收取SDL系统里面的事件
         SDL_WaitEvent(&event);
-
+        // 每收到一个刷新事件
         if(event.type == REFRESH_EVENT) // 画面刷新事件
         {
+            //读取文件内容 读取一帧数据
             video_buff_len = fread(video_buf, 1, yuv_frame_len, video_fd);
             if(video_buff_len <= 0)
             {
