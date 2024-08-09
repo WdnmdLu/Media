@@ -8,6 +8,8 @@ Widget::Widget(QWidget *parent)
     , ui(new Ui::Widget)
 {
     ui->setupUi(this);
+    cout<<"Hello World"<<endl;
+
 }
 
 Widget::~Widget()
@@ -20,10 +22,12 @@ void Widget::on_Record_clicked()
     static int flag = 1;
     if(flag == 1){
         flag = 2;
+        this->Thread.start();
         this->ui->Record->setText("暂停录制");
     }
     else if(flag == 2){
         flag = 3;
+        this->Thread.count=1;
         this->ui->Record->setText("完成录制");
     }
 }
@@ -37,10 +41,9 @@ void WorkerThread::OpenDevice(const char *devicename,AVFormatContext *fmt_ctx,AV
     avdevice_register_all();
     // 设置视频的采样格式
     const AVInputFormat* iformat = av_find_input_format("dshow");
-    av_dict_set(&option, "sample_rate", "44100", 0);
-    av_dict_set(&option, "sample_fmt", "s16", 0);
-    av_dict_set(&option, "channels", "2", 0);
-
+    av_dict_set(&option, "video_size", "1280*720", 0);
+    av_dict_set(&option, "framerate", "30", 0);
+    //av_dict_set(&option, "pixel_format", "yuyv422", 0);
     cout << "InputFormat: " << iformat->name<<endl;
 
 
@@ -52,7 +55,7 @@ void WorkerThread::OpenDevice(const char *devicename,AVFormatContext *fmt_ctx,AV
         char errors[1024];
         av_strerror(ret, errors, 1024);
         printf("failed to open device,[%d] %s\n", ret, errors);
-        return;
+        this->quit();
     }
     cout << "Open device success " << endl;
     return;
@@ -68,7 +71,7 @@ void WorkerThread::run(){
     AVDictionary *option = NULL;
 
     // 设定设备名称，这里使用的是之前获取的音频设备名称
-    const char *devicename = "audio=麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)";
+    const char *devicename = "video=Integrated Camera";
 
     // 输出到控制台，表示线程开始工作
     cout << "Thread Working" << endl;
@@ -107,5 +110,5 @@ void WorkerThread::run(){
     avformat_close_input(&fmt_ctx);
     // 反初始化网络库
     avformat_network_deinit();
-}
 
+}
