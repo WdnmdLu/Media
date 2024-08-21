@@ -100,16 +100,110 @@ void Dexumer(){
 }
 
 
-void AAC(){
-    int ret = -1;
-    char errors[1024];
+void extract_h264(const char *filename){
+    AVFormatContext *fmt_ctx = NULL;
+    AVPacket *pkt = av_packet_alloc();
 
-    char *filename = NULL;
-    char *accfile = NULL;
+    FILE *output_file = fopen("out.h264","wb");
 
-    FILE *aac_fd = NULL;
+    if(!output_file){
+        fprintf(stderr,"Could not open outputfile out.h264\n");
+        return;
+    }
 
-    int audio_index = -1;
-    av_log_set_level(AV_LOG_DEBUG);
+    if(avformat_open_input(&fmt_ctx,filename,NULL,NULL) < 0){
+        fprintf(stderr,"Could not open input file: %s\n",filename);
+        fclose(output_file);
+        return;
+    }
 
+    if(avformat_find_stream_info(fmt_ctx,NULL) < 0){
+        fprintf(stderr,"Could not find stream info\n");
+        avformat_close_input(&fmt_ctx);
+        fclose(output_file);
+        return;
+    }
+
+    int videoIndex = -1;
+    uint8_t i = 0;
+    for(i = 0;i<fmt_ctx->nb_streams ; i++){
+        if(fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
+            videoIndex = -1;
+            break;
+        }
+    }
+
+    if(videoIndex == -1){
+        fprintf(stderr,"Could not find video stream\n");
+        avformat_close_input(&fmt_ctx);
+        fclose(output_file);
+        return;
+    }
+
+    AVPacket spsPacket, ppsPacket, tmpPacket;
+    uint8_t startCode[4] = {0x00, 0x00, 0x00, 0x01};
+    uint8_t sendSpsPps = 0;
+
+    while (av_read_frame(fmt_ctx, pkt) == 0) {
+        // 根据pkt->stream_index判断是不是视频流
+        if (pkt->stream_index == videoIndex) {
+            // 仅1次处理sps pps
+            if (!sendSpsPps) {
+                int spsLength = 0;
+                int ppsLength = 0;
+                uint8_t *ex = fmt_ctx->streams[videoIndex]->codecpar->extradata;
+
+
+                // 获取SPS和PPS长度
+                spsLength = (ex[6] << 8) | ex[7];
+                ppsLength = (ex[8 + spsLength + 1] << 8) | ex[8 + spsLength + 2];
+
+
+                // 为spsPacket和ppsPacket的数据分配内存
+                av_new_packet(&spsPacket, spsLength + 4);
+                av_new_packet(&ppsPacket, ppsLength + 4);
+
+
+                // 拼接SPS
+                memcpy(spsPacket.data, startCode, 4);
+                memcpy(spsPacket.data + 4, ex + 8, spsLength);
+                fwrite(spsPacket.data, 1, spsPacket.size, output_file); // 写入SPS到文件
+
+
+                // 拼接PPS
+                memcpy(ppsPacket.data, startCode, 4);
+                memcpy(ppsPacket.data + 4, ex + 8 + spsLength + 2 + 1, ppsLength);
+                fwrite(ppsPacket.data, 1, ppsPacket.size, output_file); // 写入PPS到文件
+
+
+                sendSpsPps = 1;
+            }
+
+
+            // 处理读到pkt中的数据
+            int nalLength = 0;
+            uint8_t *data = pkt->data;
+            while (data < pkt->data + pkt->size) {
+                nalLength = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+                if (nalLength > 0) {
+                    memcpy(data, startCode, 4);  // 添加起始码
+                    tmpPacket = *pkt;      // 复制packet
+                    tmpPacket.data = data;         // 设置指针偏移
+                    tmpPacket.size = nalLength + 4; // 更新大小
+
+
+                    fwrite(tmpPacket.data, 1, tmpPacket.size, output_file); // 写入NALU到文件
+                }
+                data += 4 + nalLength; // 移动到下一个NALU
+            }
+        }
+
+
+        av_packet_unref(pkt);
+    }
+
+    fclose(output_file);
+    av_packet_free(&pkt);
+    avformat_close_input(&fmt_ctx);
+    printf("Finish\n");
 }
