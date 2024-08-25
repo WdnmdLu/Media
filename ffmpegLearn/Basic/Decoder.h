@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <SDL.h>
 #include <libavcodec/avcodec.h>
 #include <libavcodec/codec.h>
 #include <libavutil/log.h>

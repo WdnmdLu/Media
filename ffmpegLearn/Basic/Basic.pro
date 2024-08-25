@@ -5,6 +5,7 @@ CONFIG -= qt
 CONFIG+=console
 SOURCES += \
         Decoder.c \
+        Player.c \
         main.c
 
 INCLUDEPATH += ../SDL2-2.30.5/include

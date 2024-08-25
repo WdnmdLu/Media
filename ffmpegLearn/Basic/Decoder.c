@@ -1,4 +1,11 @@
 #include "Decoder.h"
+
+static char err_buf[128] = {0};
+static char* av_get_err(int errnum)
+{
+    av_strerror(errnum, err_buf, 128);
+    return err_buf;
+}
 // 解码输入的MP4文件，提取其中的音频流数据生成对应的aac文件
 #define ADTS_HEADER_LEN  7;
 const int sampling_frequencies[] = {
@@ -73,9 +80,8 @@ int adts_header(char * const p_adts_header, const int data_length,
 void ADTS_Header(){
     int ret = -1;
     char errors[1024];
-    char *filename = "20--02-FFMPEG如何查询命令帮助文档.mp4";
-    char *aacfile = "out.aac";
-
+    const char *filename = "20--02-FFMPEG如何查询命令帮助文档.mp4";
+    const char *aacfile = "out.aac";
     FILE *aac_fd = NULL;
     int audio_index = -1;
     int len = 0;
@@ -421,5 +427,99 @@ void Dexumer(){
         }
     }
     printf("AudioIndex:%d   VideoIndex:%d\n",audioIndex,videoIndex);
+}
+
+// 提取MP4文件的视频流信息，将其解码生成yuv数据并输出到out.yuv
+void DecodeMP4toYUV(const char *filename){
+
+    AVFormatContext *fmt_ctx = NULL;
+    int videoStream;
+    uint32_t i;
+    FILE *out = fopen("out.yuv","wb+");
+    AVCodecContext *CodecCtx = NULL;
+
+    const AVCodec *codec = NULL;
+    AVFrame *frame = NULL;
+    AVPacket pkt;
+    AVCodecParameters *Parameters;
+
+    // 打开输入文件
+    if(avformat_open_input(&fmt_ctx, filename, NULL, NULL) != 0){
+        printf("Open file failed\n");
+        return;
+    }
+    printf("Begin find stream info\n");
+    // 检查是否是媒体文件
+    if(avformat_find_stream_info(fmt_ctx, NULL) < 0){
+        av_log(NULL,AV_LOG_ERROR,"Failed to find stream");
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+    // 检查是否有视频流信息
+    videoStream = -1;
+    for(i=0 ; i<fmt_ctx->nb_streams ; i++){
+        if(fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
+            videoStream = i;
+
+            break;
+        }
+    }
+    if(videoStream == -1){
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+
+    codec = avcodec_find_decoder(fmt_ctx->streams[i]->codecpar->codec_id);
+    if(codec == NULL){
+        avformat_close_input(&fmt_ctx);
+        printf("Can't find decoder\n");
+        return;
+    }
+    // 根据找到的解码器从而分配对应的解码器上下文用于解码中的数据缓存
+    CodecCtx = avcodec_alloc_context3(codec);
+    // 将流的编解码参数设置到这个上下文中
+    avcodec_parameters_to_context(CodecCtx,fmt_ctx->streams[videoStream]->codecpar);
+    if(avcodec_open2(CodecCtx,codec,NULL) < 0){
+        printf("Failed to open decoder\n");
+       avformat_close_input(&fmt_ctx);
+       avcodec_close(CodecCtx);
+       return;
+    }
+
+    frame = av_frame_alloc();
+    int ret = 0;
+    av_init_packet(&pkt);
+    while(av_read_frame(fmt_ctx,&pkt) >= 0){
+        if(pkt.stream_index == videoStream){
+            //收到了视频数据，开始进行解码处理，生成一帧的YUV图像
+            if((ret = avcodec_send_packet(CodecCtx,&pkt)) >= 0){
+                // 并不会每次send_packet就会立刻能receive_frame，可能需要多次send才能Receive
+                while(avcodec_receive_frame(CodecCtx,frame) >= 0){
+
+                    // 将 YUV 数据写入文件
+                    //1080*1920
+                    int y_size = CodecCtx->width * CodecCtx->height;
+                    int uv_size = (CodecCtx->width / 2) * (CodecCtx->height / 2);
+                    //memcpy(buffer,frame->data[0],y_size);
+                    //memcpy(buffer+y_size,frame->data[1],uv_size);
+                    //memcpy(buffer+y_size+uv_size,frame->data[2],uv_size);
+                    //fwrite(buffer, 1, y_size + uv_size*2, out);
+                    printf("Receive one frame y_size: %d  uv_size: %d\n",y_size,uv_size);
+                    fwrite(frame->data[0], 1, y_size, out); // Y 平面
+                    fwrite(frame->data[1], 1, uv_size, out); // U 平面
+                    fwrite(frame->data[2], 1, uv_size, out); // V 平面
+                }
+            }
+            else{
+                fprintf(stderr,"avcodec_receive_frame: %s\n",av_get_err(ret));
+            }
+        }
+        av_packet_unref(&pkt);
+    }
+    printf("Finish w: %d   h: %d\n",CodecCtx->width,CodecCtx->height);
+    avformat_close_input(&fmt_ctx);
+    avcodec_close(CodecCtx);
+    av_packet_unref(&pkt);
+    return;
 }
 
