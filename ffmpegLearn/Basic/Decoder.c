@@ -431,7 +431,6 @@ void Dexumer(){
 
 // 提取MP4文件的视频流信息，将其解码生成yuv数据并输出到out.yuv
 void DecodeMP4toYUV(const char *filename){
-
     AVFormatContext *fmt_ctx = NULL;
     int videoStream;
     uint32_t i;
@@ -495,15 +494,11 @@ void DecodeMP4toYUV(const char *filename){
             if((ret = avcodec_send_packet(CodecCtx,&pkt)) >= 0){
                 // 并不会每次send_packet就会立刻能receive_frame，可能需要多次send才能Receive
                 while(avcodec_receive_frame(CodecCtx,frame) >= 0){
-
                     // 将 YUV 数据写入文件
                     //1080*1920
                     int y_size = CodecCtx->width * CodecCtx->height;
                     int uv_size = (CodecCtx->width / 2) * (CodecCtx->height / 2);
-                    //memcpy(buffer,frame->data[0],y_size);
-                    //memcpy(buffer+y_size,frame->data[1],uv_size);
-                    //memcpy(buffer+y_size+uv_size,frame->data[2],uv_size);
-                    //fwrite(buffer, 1, y_size + uv_size*2, out);
+
                     printf("Receive one frame y_size: %d  uv_size: %d\n",y_size,uv_size);
                     fwrite(frame->data[0], 1, y_size, out); // Y 平面
                     fwrite(frame->data[1], 1, uv_size, out); // U 平面
@@ -523,3 +518,115 @@ void DecodeMP4toYUV(const char *filename){
     return;
 }
 
+void DecodeMP4toPCM(const char *filename) {
+    AVFormatContext *fmt_ctx = NULL;
+    int audioStream = -1, i;
+    AVCodecContext *CodecCtx = NULL;
+    const AVCodec *Codec = NULL;
+    AVFrame *Frame = NULL;
+    AVPacket *Pkt = NULL;
+    FILE *out = fopen("out.pcm","wb");
+    // 打开输入文件
+    if (avformat_open_input(&fmt_ctx, filename, NULL, NULL) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to open input file\n");
+        return;
+    }
+
+    // 查找流信息
+    if (avformat_find_stream_info(fmt_ctx, NULL) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to find stream info\n");
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+
+    // 查找音频流
+    for (i = 0; i < fmt_ctx->nb_streams; i++) {
+        if (fmt_ctx->streams[i]->codecpar->codec_type == AVMEDIA_TYPE_AUDIO) {
+            audioStream = i;
+            break;
+        }
+    }
+    if (audioStream == -1) {
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+
+    // 查找解码器
+    Codec = avcodec_find_decoder(fmt_ctx->streams[audioStream]->codecpar->codec_id);
+    if (Codec == NULL) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to find decoder\n");
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+
+    // 分配解码器上下文
+    CodecCtx = avcodec_alloc_context3(Codec);
+    if (CodecCtx == NULL) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to allocate codec context\n");
+        avformat_close_input(&fmt_ctx);
+        return;
+    }
+
+    // 将流的编解码参数复制到上下文中
+    if (avcodec_parameters_to_context(CodecCtx, fmt_ctx->streams[audioStream]->codecpar) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to copy codec parameters to context\n");
+        avformat_close_input(&fmt_ctx);
+        avcodec_free_context(&CodecCtx);
+        return;
+    }
+
+    // 打开解码器
+    if (avcodec_open2(CodecCtx, Codec, NULL) < 0) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to open codec\n");
+        avformat_close_input(&fmt_ctx);
+        avcodec_free_context(&CodecCtx);
+        return;
+    }
+
+    Frame = av_frame_alloc();
+    if (Frame == NULL) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to allocate frame\n");
+        avformat_close_input(&fmt_ctx);
+        avcodec_free_context(&CodecCtx);
+        return;
+    }
+
+    Pkt = av_packet_alloc();
+    if (Pkt == NULL) {
+        av_log(NULL, AV_LOG_ERROR, "Failed to allocate packet\n");
+        av_frame_free(&Frame);
+        avformat_close_input(&fmt_ctx);
+        avcodec_free_context(&CodecCtx);
+        return;
+    }
+    int ret;
+    int data_size;
+    while (av_read_frame(fmt_ctx, Pkt) >= 0) {
+        if (Pkt->stream_index == audioStream) {
+            if ((ret = avcodec_send_packet(CodecCtx, Pkt)) >= 0) {
+                while (avcodec_receive_frame(CodecCtx, Frame) >= 0) {
+                    data_size = av_get_bytes_per_sample(CodecCtx->sample_fmt);
+                    if(data_size<0){
+                        return;
+                    }
+                    for(i = 0; i<Frame->nb_samples;i++){
+                        fwrite(Frame->data[ret] + data_size*i,1,data_size,out);
+                    }
+                }
+            } else {
+                if(ret == AVERROR(EAGAIN)){
+                    fprintf(stderr,"Receive_frame and send_packet both \n");
+                }
+            }
+        }
+        av_packet_unref(Pkt);
+    }
+    av_dump_format(fmt_ctx,0,filename,0);
+    printf("Finish\n");
+    fclose(out);
+    // 释放资源
+    av_packet_free(&Pkt);
+    av_frame_free(&Frame);
+    avcodec_free_context(&CodecCtx);
+    avformat_close_input(&fmt_ctx);
+}
