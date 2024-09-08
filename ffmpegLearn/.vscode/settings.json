@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "avformat.h": "c",
-        "avio.h": "c",
-        "log.h": "c",
-        "mem.h": "c",
-        "random": "c"
-    }
-}
