@@ -441,7 +441,8 @@ void VideoPlayer(const char *filename){
     return;
 }
 
-void AudioPlayer(const char *filename) {
+// 解码输入的MP4文件，提取其中的AAC数据，解码生成PCM数据并进行播放
+void audioPlayer(const char *filename){
     AVFormatContext *fmt_ctx = NULL;
     AVCodecContext *CodecCtx = NULL;
     const AVCodec *Codec = NULL;
@@ -469,6 +470,7 @@ void AudioPlayer(const char *filename) {
             break;
         }
     }
+
     if (audioStream == -1) {
         fprintf(stderr, "Failed to find Audio Stream\n");
         avformat_close_input(&fmt_ctx);
@@ -519,18 +521,20 @@ void AudioPlayer(const char *filename) {
         avformat_close_input(&fmt_ctx);
         return;
     }
+
     av_dump_format(fmt_ctx,0,filename,0);
     printf("%p",CodecCtx);
     // 配置SDL音频规格
     SDL_AudioSpec spec;
-    spec.freq = 44100;
-    spec.format = AUDIO_F32SYS; // 修改为 16-bit signed integer format 以匹配常见音频格式
-    spec.channels = 1;
-    spec.silence = 0;
-    spec.samples = 1024; // 每次音频回调处理的样本数量
-    spec.callback = fill_audio_pcm;
-    spec.userdata = NULL;
+    spec.freq = fmt_ctx->streams[audioStream]->codecpar->sample_rate;             // 采样率 44100 Hz
+    spec.format = AUDIO_F32SYS;    // 32-bit 浮点数格式     MP4文件解码生成的音频数据默认就是 Float类型
+    spec.channels = 2;             // 单声道
+    spec.silence = 0;              // 无需设置静音值（不适用浮点格式）
+    spec.samples = PCM_BUFFER_SIZE / 8; // 每次音频回调处理的样本数量
+    spec.callback = fill_audio_pcm; // 音频数据填充回调函数
+    spec.userdata = NULL;          // 回调函数数据（未使用）
 
+    char buffer[PCM_BUFFER_SIZE]={0};
     // 打开SDL音频设备
     if (SDL_OpenAudio(&spec, NULL)) {
         fprintf(stderr, "Failed to open audio device\n");
@@ -543,23 +547,38 @@ void AudioPlayer(const char *filename) {
     s_audio_buf = (uint8_t*)malloc(PCM_BUFFER_SIZE);
     // 开始播放音频
     SDL_PauseAudio(0);
-    int data_size,i;
+    int ch;
+    int data_size,i,j;
+    int len;
     while (av_read_frame(fmt_ctx, &pkt) >= 0) {
         if(pkt.stream_index == audioStream){
             //收到了视频数据，开始进行解码处理，生成一帧的YUV图像
             if((ret = avcodec_send_packet(CodecCtx,&pkt)) >= 0){
                 // 并不会每次send_packet就会立刻能receive_frame，可能需要多次send才能Receive
                 while(avcodec_receive_frame(CodecCtx,frame) >= 0){
+                    printf("Read one audio frame\n");
                     //将这一帧数据写入到缓存中
                     data_size = av_get_bytes_per_sample(CodecCtx->sample_fmt);
                     if(data_size < 0){
                         return;
                     }
-                    for(i = 0; i<frame->nb_samples;i++){
-                        //fwrite(frame->data[ret] + data_size*i,1,data_size,out);
-                        memcpy(s_audio_buf+i*data_size,frame->data[ret] + data_size*i,data_size);
+
+                    s_audio_end = s_audio_buf;
+                    len = 0;
+                    // frame->nb_samples 这一帧音频数据有nb_samples个样本  通常这个值为1024
+                    for (i = 0,j = 0; i < frame->nb_samples; i++)
+                    {
+                        for (ch = 0; ch < frame->ch_layout.nb_channels; ch++)  // 交错的方式写入, 大部分float的格式输出
+                        {
+                            memcpy(s_audio_buf + data_size * j, frame->extended_data[ch] + data_size * i, data_size);
+                            len += data_size;
+                            j++;
+                        }
+
                     }
-                    s_audio_end = s_audio_buf + data_size*frame->nb_samples;
+
+
+                    s_audio_end = s_audio_buf + len;
                     s_audio_pos = s_audio_buf;
                     // 等待直到所有数据被播放
                     while (s_audio_pos < s_audio_end) {
