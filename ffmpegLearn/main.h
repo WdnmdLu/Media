@@ -60,29 +60,12 @@ void MediaPlayer02(const char *filrname);
 
 struct Node {
     void *data;
+    // 指向下一个元素
     struct Node *next;
-
+    // 指向上一个元素
+    struct Node *pre;
     Node() : data(nullptr), next(nullptr){}
 };
 
-class pktQueue{
-public:
-    pktQueue();
-    ~pktQueue();
-
-    void Push(void *data);
-    void Pop();
-    int GetSize();
-    void *Back();
-
-private:
-    int Size;
-    pthread_mutex_t Mut;
-    pthread_cond_t Cond;
-    Node *head;
-    Node *tail;
-};
-
-
-
+class pktQueue;
 #endif // MAIN_H
