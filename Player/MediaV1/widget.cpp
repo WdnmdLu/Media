@@ -30,10 +30,34 @@ void Widget::on_Chose_clicked()
 
 void Widget::on_Play_clicked()
 {
-    this->player->setUpdateCallback(std::bind(&Widget::UpdateSlider,this));
-    if(!player->Begin()){
-        QMessageBox::information(this,"Error","未选择视频，无法播放");
-        return;
+    static int flag = 1;
+    if(flag == 1){
+        this->player->setUpdateCallback(std::bind(&Widget::UpdateSlider,this));
+        //这个是切换新的视频进行播放
+        if(!player->Begin()){
+            QMessageBox::information(this,"Error","未选择视频，无法播放");
+            flag = 1;
+            return;
+        }
+        int Seconds = player->TotalTime%60;
+        int Minutes = player->TotalTime/60;
+        char buffer[64] = {0};
+        sprintf(buffer, "%02d:%02d", Minutes, Seconds);
+        ui->Total->setText(buffer);
+        flag = 2;
+        this->ui->Play->setText("暂停");
+    }//执行暂停操作
+    else if(flag == 2){
+        flag = 3;
+        this->ui->Play->setText("播放");
+        //调用暂停函数
+        player->Stop();
+    }
+    else{
+        flag = 2;
+        this->ui->Play->setText("暂停");
+        //这个是让正在播放的视频从暂停状态切换到播放状态接着播放
+        this->player->Play();
     }
 }
 
@@ -43,8 +67,8 @@ void Widget::UpdateSlider(){
     static int Minutes = 0;// 秒
     Time = ui->horizontalSlider->value();
     Time++;
-    Seconds = Time/60;
-    Minutes = Time%60;
+    Seconds = Time%60;
+    Minutes = Time/60;
     char buffer[64] = {0};
     sprintf(buffer, "%02d:%02d", Minutes, Seconds);
 

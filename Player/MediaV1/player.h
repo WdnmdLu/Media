@@ -33,10 +33,12 @@ public:
     bool Begin();
     // 暂停播放
     void Stop();
+    // 恢复暂停状态到播放状态
+    void Play();
     // 退出播放
     void Exit();
     // seek到指定位置播放
-    void Seek();
+    void Seek(int Pos);
     // 设置文件路径(在这里也完成了上下文和解码器相关的初始化
     void SetFilePath(QString path);
 
@@ -45,6 +47,11 @@ public:
     }
     int TotalTime = 0;
 private:
+    void SDLAudioInit();
+
+    void InitDecode();
+
+    void DeInitDecode();
 
     int VideoThread();
 
@@ -88,15 +95,14 @@ private:
     // 音频包队列
     Queue AudioQueue;
 
-    // 当前帧的时间戳
+    // 当前视频帧的时间
     double CurrentVideoTimeStamp = 0.0f;
-    // 下一帧的时间戳
+    // 上一帧的视频时间
     double LastVideoTimeStamp = 0.0f;
     // 音频时间戳
     double AudioTimeStamp = 0.0f;
     // 上一帧的音频时间戳
     double LastAudioTimeStamp = 0.0f;
-
     QString filePath = "";
     // 更新进度条和当前的播放时间
     std::function<void()> updateCallback;
@@ -115,6 +121,8 @@ private:
     uint32_t pixformat = SDL_PIXELFORMAT_IYUV;  // YUV420P，即是SDL_PIXELFORMAT_IYUV
 
     SDL_AudioSpec spec;
+
+    bool doSeek = false;
 };
 
 #endif // PLAYER_H
