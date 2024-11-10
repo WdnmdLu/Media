@@ -9,13 +9,14 @@ Widget::Widget(QWidget *parent)
     , ui(new Ui::Widget)
 {
     ui->setupUi(this);
-    player = new Player((void*)(this->ui->widget->winId()));
     printf("InitSuccress\n");
+    player = new Player();
     fflush(NULL);
 }
 
 Widget::~Widget()
 {
+    delete(player);
     printf("~Widget\n");
     fflush(NULL);
     delete ui;
@@ -35,6 +36,9 @@ void Widget::on_Play_clicked()
     static int flag = 1;
     if(flag == 1){
         this->player->setUpdateCallback(std::bind(&Widget::UpdateSlider,this));
+        player->setRenderCallback(std::bind(&CCOpenGLWidget::RendVideo, ui->Show, std::placeholders::_1));
+        printf("SetCallBackOK\n");
+        fflush(NULL);
         //这个是切换新的视频进行播放
         if(!player->Begin()){
             QMessageBox::information(this,"Error","未选择视频，无法播放");

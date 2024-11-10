@@ -2,6 +2,12 @@
 #include <iostream>
 #include <functional>
 #include <math.h>
+#include <openglwidget.h>
+
+#if !defined(MIN)
+    #define MIN(A,B)	((A) < (B) ? (A) : (B))
+#endif
+
 #define Range 200
 // 音频PCM数据缓存
 static Uint8 *s_audio_buf = NULL;
@@ -40,25 +46,10 @@ void fill_audio_pcm(void *data, uint8_t *stream, int len){
     s_audio_pos += len;
 }
 
-Player::Player(void* win)
+Player::Player()
 {
     //SDL初始化
-    SDL_Init(SDL_INIT_AUDIO|SDL_INIT_VIDEO);
-
-    window = SDL_CreateWindowFrom(win);
-    if(!window)
-    {
-        fprintf(stderr, "SDL: could not create window, err:%s\n",SDL_GetError());
-
-    }
-    // 基于窗口创建渲染器   这个渲染器是在这个窗口内进行渲染的
-    renderer = SDL_CreateRenderer(window, -1, 0);
-    // 基于渲染器创建纹理
-    texture = SDL_CreateTexture(renderer,
-                                pixformat,
-                                SDL_TEXTUREACCESS_STREAMING,
-                                width,
-                                height);
+    SDL_Init(SDL_INIT_AUDIO);
 
     pthread_mutex_init(&Mut,NULL);
     pthread_cond_init(&Cond,NULL);
@@ -73,6 +64,8 @@ Player::~Player(){
 }
 // 设置播放的媒体文件路径
 void Player::SetFilePath(QString path){
+    printf("Begin to set filePath\n");
+    fflush(NULL);
     if(this->filePath.isEmpty()){
         this->filePath = path;
         InitDecode();
@@ -144,6 +137,7 @@ int Player::VideoThread(){
                        this->vCodecCtx->height,
                        dFrame->data,
                        dFrame->linesize);
+            //传入的是转化后的帧
             ShowPicture(dFrame);
             videoDelay(frame);
         }
@@ -292,22 +286,64 @@ void Player::audioDelay(AVFrame* frame){
     }
 }
 
+void copyDecodedFrame420(uint8_t* src, uint8_t* dist,int linesize, int width, int height)
+{
+    width = MIN(linesize, width);
+    for (int i = 0; i < height; ++i) {
+        memcpy(dist, src, width);
+        dist += width;
+        src += linesize;
+    }
+}
+// 传入的帧就是已经经过转化后的帧了
 void Player::ShowPicture(AVFrame* frame){
-    SDL_UpdateYUVTexture(texture, NULL,
-                         frame->data[0], frame->linesize[0],
-                         frame->data[1], frame->linesize[1],
-                         frame->data[2], frame->linesize[2]);
+    //在这里调用OpenGL的接口进行渲染
+    unsigned int lumaLength= vCodecCtx->height * (MIN(frame->linesize[0], vCodecCtx->width));
+    unsigned int chromBLength=((vCodecCtx->height)/2)*(MIN(frame->linesize[1], (vCodecCtx->width)/2));
+    unsigned int chromRLength=((vCodecCtx->height)/2)*(MIN(frame->linesize[2], (vCodecCtx->width)/2));
 
-    rect.x = 0;
-    rect.y = 0;
+    H264YUV_Frame *updateYUVFrame = new H264YUV_Frame();
 
-    rect.w = frame->width;
-    rect.h = frame->height;
-    SDL_RenderClear(renderer);
-    // 将纹理的数据拷贝给渲染器
-    SDL_RenderCopy(renderer, texture, NULL, &rect);
-    // 显示
-    SDL_RenderPresent(renderer);
+    updateYUVFrame->luma.length = lumaLength;
+    updateYUVFrame->chromaB.length = chromBLength;
+    updateYUVFrame->chromaR.length =chromRLength;
+
+    updateYUVFrame->luma.dataBuffer=(unsigned char*)malloc(lumaLength);
+    updateYUVFrame->chromaB.dataBuffer=(unsigned char*)malloc(chromBLength);
+    updateYUVFrame->chromaR.dataBuffer=(unsigned char*)malloc(chromRLength);
+
+    copyDecodedFrame420(frame->data[0],updateYUVFrame->luma.dataBuffer,frame->linesize[0],
+              vCodecCtx->width,vCodecCtx->height);
+    copyDecodedFrame420(frame->data[1], updateYUVFrame->chromaB.dataBuffer,frame->linesize[1],
+              vCodecCtx->width / 2,vCodecCtx->height / 2);
+    copyDecodedFrame420(frame->data[2], updateYUVFrame->chromaR.dataBuffer,frame->linesize[2],
+              vCodecCtx->width / 2,vCodecCtx->height / 2);
+    updateYUVFrame->width=vCodecCtx->width;
+    updateYUVFrame->height=vCodecCtx->height;
+
+    // 开始进行渲染
+    this->RenderCallback(updateYUVFrame);
+
+    // 渲染完成之后释放这一帧数据
+    if(updateYUVFrame->luma.dataBuffer){
+        free(updateYUVFrame->luma.dataBuffer);
+        updateYUVFrame->luma.dataBuffer=NULL;
+    }
+
+    if(updateYUVFrame->chromaB.dataBuffer){
+        free(updateYUVFrame->chromaB.dataBuffer);
+        updateYUVFrame->chromaB.dataBuffer=NULL;
+    }
+
+    if(updateYUVFrame->chromaR.dataBuffer){
+        free(updateYUVFrame->chromaR.dataBuffer);
+        updateYUVFrame->chromaR.dataBuffer=NULL;
+    }
+
+    if(updateYUVFrame){
+        delete updateYUVFrame;
+        updateYUVFrame = NULL;
+    }
 }
 
 void Player::PlayAudio(AVFrame* frame){

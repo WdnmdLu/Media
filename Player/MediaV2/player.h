@@ -14,6 +14,7 @@ extern "C"{
 }
 #include <queue.h>
 #include <QString>
+#include <openglwidget.h>
 
 enum State{
     NONE = 0,// 默认值为NONE
@@ -29,7 +30,7 @@ class Player
 friend void fill_audio_pcm(void *data, uint8_t *stream, int len);
 
 public:
-    Player(void* win);
+    Player();
     ~Player();
     // 开始播放
     bool Begin();
@@ -46,6 +47,10 @@ public:
 
     void setUpdateCallback(const std::function<void()>& callback) {
         updateCallback = callback;
+    }
+
+    void setRenderCallback(const std::function<void(H264YUV_Frame*)>& callback) {
+        RenderCallback = callback;
     }
     int TotalTime = 0;
 private:
@@ -108,6 +113,7 @@ private:
     QString filePath = "";
     // 更新进度条和当前的播放时间
     std::function<void()> updateCallback;
+    std::function<void(H264YUV_Frame*)> RenderCallback;
 
     //SDL相关变量
     // 播放器的宽
@@ -115,11 +121,6 @@ private:
     // 播放器的高
     int height = 720;
 
-    SDL_Event event;                            // 事件
-    SDL_Rect rect;                              // 矩形
-    SDL_Window *window = NULL;                  // 窗口
-    SDL_Renderer *renderer = NULL;              // 渲染
-    SDL_Texture *texture = NULL;                // 纹理
     uint32_t pixformat = SDL_PIXELFORMAT_IYUV;  // YUV420P，即是SDL_PIXELFORMAT_IYUV
 
     SDL_AudioSpec spec;
