@@ -67,11 +67,11 @@ private:
 
     QOpenGLShaderProgram *m_pShaderProgram = NULL;
 
-    uint8_t m_nVideoW       =0; //视频分辨率宽
-    uint8_t m_nVideoH       =0; //视频分辨率高
-    uint8_t m_yFrameLength  =0;
-    uint8_t m_uFrameLength  =0;
-    uint8_t m_vFrameLength  =0;
+    uint m_nVideoW       =0; //视频分辨率宽
+    uint m_nVideoH       =0; //视频分辨率高
+    uint m_yFrameLength  =0;
+    uint m_uFrameLength  =0;
+    uint m_vFrameLength  =0;
 
     unsigned char* m_pBufYuv420p = NULL;
 

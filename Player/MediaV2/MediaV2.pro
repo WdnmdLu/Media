@@ -37,3 +37,7 @@ LIBS += ../ffmpeg-master-latest-win64-gpl-shared/lib/avcodec.lib \
         ../ffmpeg-master-latest-win64-gpl-shared/lib/swresample.lib \
         ../ffmpeg-master-latest-win64-gpl-shared/lib/swscale.lib \
         ../ffmpeg-master-latest-win64-gpl-shared/lib/avdevice.lib
+
+DISTFILES += \
+    ../MediaV2-Build/fragment.frag \
+    ../MediaV2-Build/vertex.vert

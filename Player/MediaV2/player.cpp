@@ -104,19 +104,24 @@ int Player::VideoThread(){
         return -1;
     }
     for(;;){
+        videoRun = true;
         if(this->state == FINISH && this->VideoQueue.GetSize() == 0){
+            videoRun = false;
             printf("VideoFinishPlay\n");
             fflush(NULL);
             pthread_cond_wait(&Cond,&Mut);
             pthread_mutex_unlock(&Mut);
+            videoRun = true;
         }
         if(this->state == SEEK || this->state == STOP){
+            videoRun = false;
             printf("VideoWait\n");
             fflush(NULL);
             pthread_cond_wait(&Cond,&Mut);
             pthread_mutex_unlock(&Mut);
             printf("Video WakeUp\n");
             fflush(NULL);
+            videoRun = true;
         }
         else if(this->state == EXIT){
 
@@ -152,6 +157,7 @@ int Player::AudioThread(){
     AVFrame* frame = av_frame_alloc();
     SDL_PauseAudio(0);
     for(;;){
+        audioRun = true;
         if(this->state == FINISH && this->state == FINISH){
             printf("AudioFinishPlay\n");
             fflush(NULL);
@@ -297,20 +303,15 @@ void copyDecodedFrame420(uint8_t* src, uint8_t* dist,int linesize, int width, in
 }
 // 传入的帧就是已经经过转化后的帧了
 void Player::ShowPicture(AVFrame* frame){
-    //在这里调用OpenGL的接口进行渲染
-    unsigned int lumaLength= vCodecCtx->height * (MIN(frame->linesize[0], vCodecCtx->width));
-    unsigned int chromBLength=((vCodecCtx->height)/2)*(MIN(frame->linesize[1], (vCodecCtx->width)/2));
-    unsigned int chromRLength=((vCodecCtx->height)/2)*(MIN(frame->linesize[2], (vCodecCtx->width)/2));
-
     H264YUV_Frame *updateYUVFrame = new H264YUV_Frame();
 
-    updateYUVFrame->luma.length = lumaLength;
-    updateYUVFrame->chromaB.length = chromBLength;
-    updateYUVFrame->chromaR.length =chromRLength;
+    updateYUVFrame->luma.length = 1280*720;// y通道字节数
+    updateYUVFrame->chromaB.length = 1280*720/4;// u通道的字节数
+    updateYUVFrame->chromaR.length = 1280*720/4;// v通道的字节数
 
-    updateYUVFrame->luma.dataBuffer=(unsigned char*)malloc(lumaLength);
-    updateYUVFrame->chromaB.dataBuffer=(unsigned char*)malloc(chromBLength);
-    updateYUVFrame->chromaR.dataBuffer=(unsigned char*)malloc(chromRLength);
+    updateYUVFrame->luma.dataBuffer= (unsigned char*)malloc(1280*720);
+    updateYUVFrame->chromaB.dataBuffer= (unsigned char*)malloc(1280*720/4);
+    updateYUVFrame->chromaR.dataBuffer= (unsigned char*)malloc(1280*720/4);
 
     copyDecodedFrame420(frame->data[0],updateYUVFrame->luma.dataBuffer,frame->linesize[0],
               vCodecCtx->width,vCodecCtx->height);
@@ -318,6 +319,8 @@ void Player::ShowPicture(AVFrame* frame){
               vCodecCtx->width / 2,vCodecCtx->height / 2);
     copyDecodedFrame420(frame->data[2], updateYUVFrame->chromaR.dataBuffer,frame->linesize[2],
               vCodecCtx->width / 2,vCodecCtx->height / 2);
+    printf("FrameWidth: %d  FrameHeight: %d\n",vCodecCtx->width,vCodecCtx->height);
+    fflush(NULL);
     updateYUVFrame->width=vCodecCtx->width;
     updateYUVFrame->height=vCodecCtx->height;
 
@@ -439,7 +442,8 @@ void Player::InitDecode(){
     swsCtx = sws_getContext(fmt_ctx->streams[videoIndex]->codecpar->width,// 原视频宽度
                    fmt_ctx->streams[videoIndex]->codecpar->height,// 原视频高度
                    (AVPixelFormat)fmt_ctx->streams[videoIndex]->codecpar->format,// 原视频的格式
-                   width,height,// 转化后图片的宽高
+                   1280,
+                   720,// 转化后图片的宽高
                    AV_PIX_FMT_YUV420P,SWS_BILINEAR,NULL,NULL,NULL);
 }
 
@@ -468,6 +472,10 @@ void Player::Exit(){
 
 void Player::Seek(int Pos){
     this->state = SEEK;
+    while(videoRun == true){
+        SDL_Delay(5);
+    }
+    //需要等待所有的线程都阻塞了才能进行seek操作
     // 关闭音频播放
     SDL_PauseAudio(1);
     // 清空音频当前播放的数据

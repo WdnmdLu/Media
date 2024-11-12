@@ -133,6 +133,10 @@ private:
     //用于seek后的音视频同步的信号量
     pthread_mutex_t timeMut;
     pthread_cond_t timeCond;
+
+    bool videoRun = false;
+    bool audioRun = false;
+    bool readRun = false;
 };
 
 #endif // PLAYER_H

@@ -22,7 +22,6 @@ Widget::~Widget()
     delete ui;
 }
 
-
 void Widget::on_Chose_clicked()
 {
     player->SetFilePath(QFileDialog::getOpenFileName(this,"请选择文件","D:/","(*.mp4 *.flv);;").toStdString().c_str());

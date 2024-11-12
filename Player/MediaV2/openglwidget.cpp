@@ -17,6 +17,7 @@ CCOpenGLWidget::CCOpenGLWidget(QWidget *parent):QOpenGLWidget(parent)
     m_uFrameLength =0;
     m_vFrameLength =0;
 
+
 }
 
 CCOpenGLWidget::~CCOpenGLWidget()
@@ -43,7 +44,6 @@ void CCOpenGLWidget::RendVideo(H264YUV_Frame* yuvFrame)
     if(yuvFrame == NULL ){
         return;
     }
-
     if(m_nVideoH != yuvFrame->height || m_nVideoW != yuvFrame->width){
 
         if(NULL != m_pBufYuv420p)
@@ -53,13 +53,15 @@ void CCOpenGLWidget::RendVideo(H264YUV_Frame* yuvFrame)
         }
     }
 
-    m_nVideoW =  yuvFrame->width;
+    m_nVideoW = yuvFrame->width;
     m_nVideoH = yuvFrame->height;
 
     m_yFrameLength = yuvFrame->luma.length;
     m_uFrameLength = yuvFrame->chromaB.length;
     m_vFrameLength = yuvFrame->chromaR.length;
-
+    printf("Width: %d   Height: %d\n",m_nVideoW,m_nVideoH);
+    fflush(NULL);
+    printf("Y: %d  U: %d  V: %d\n");
 
     //申请内存存一帧yuv图像数据,其大小为分辨率的1.5倍
     int nLen = m_yFrameLength + m_uFrameLength +m_vFrameLength;
@@ -72,6 +74,7 @@ void CCOpenGLWidget::RendVideo(H264YUV_Frame* yuvFrame)
     memcpy(m_pBufYuv420p,yuvFrame->luma.dataBuffer,m_yFrameLength);
     memcpy(m_pBufYuv420p+m_yFrameLength,yuvFrame->chromaB.dataBuffer,m_uFrameLength);
     memcpy(m_pBufYuv420p+m_yFrameLength +m_uFrameLength,yuvFrame->chromaR.dataBuffer,m_vFrameLength);
+
 
     m_bUpdateData =true;
 
@@ -148,8 +151,11 @@ void CCOpenGLWidget::initializeGLSLShaders()
 
 void CCOpenGLWidget::resizeGL(int w, int h)
 {
+    printf("Width: %d  Height: %d\n",w,h);
+    fflush(NULL);
     glViewport(0,0, w,h);
 }
+
 
 // 渲染OpenGL内容
 void CCOpenGLWidget::paintGL()
@@ -178,6 +184,7 @@ void CCOpenGLWidget::paintGL()
     matrix.ortho(-1,1,-1,1,0.1,1000);
     // 将物体沿Z轴负方向移动，以便在摄像机前渲染
     matrix.translate(0,0,-3);
+
     // 绑定着色器程序，以便使用定义好的顶点着色器和片段着色器
     m_pShaderProgram->bind();
 
