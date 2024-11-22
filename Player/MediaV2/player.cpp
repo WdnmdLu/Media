@@ -41,7 +41,7 @@ void fill_audio_pcm(void *data, uint8_t *stream, int len){
     int remain_buffer_len = s_audio_end - s_audio_pos;
     len = (len < remain_buffer_len) ? len : remain_buffer_len;
     // 将数据从缓存填充到音频流
-    SDL_MixAudio(stream, s_audio_pos, len, SDL_MIX_MAXVOLUME / 8);
+    SDL_MixAudio(stream, s_audio_pos, len, SDL_MIX_MAXVOLUME/2);
     // 更新缓存中的当前位置
     s_audio_pos += len;
 }
@@ -54,12 +54,16 @@ Player::Player()
     pthread_mutex_init(&Mut,NULL);
     pthread_cond_init(&Cond,NULL);
 
+    pthread_mutex_init(&RunMut,NULL);
+    pthread_mutex_init(&RunCond,NULL);
+
     pthread_mutex_init(&timeMut,NULL);
     pthread_cond_init(&timeCond,NULL);
 }
 
 Player::~Player(){
     printf("~Player\n");
+    DeInitDecode();
     fflush(NULL);
 }
 // 设置播放的媒体文件路径
@@ -113,21 +117,25 @@ int Player::VideoThread(){
             pthread_mutex_unlock(&Mut);
             videoRun = true;
         }
-        if(this->state == SEEK || this->state == STOP){
+        if(this->state == SEEK){
             videoRun = false;
-            printf("VideoWait\n");
+            pthread_cond_signal(&Cond);
+            // 等待完成Seek操作
+            pthread_cond_wait(&RunCond,&RunMut);
+            pthread_mutex_unlock(&RunMut);
+            videoRun = true;
+            printf("VideoThread WakeUp\n");
             fflush(NULL);
+        }
+        else if(this->state == STOP){
             pthread_cond_wait(&Cond,&Mut);
             pthread_mutex_unlock(&Mut);
-            printf("Video WakeUp\n");
-            fflush(NULL);
-            videoRun = true;
         }
         else if(this->state == EXIT){
 
         }
-        else if(this->VideoQueue.GetSize() == 0){
-            SDL_Delay(10);
+        if(this->VideoQueue.GetSize() == 0){
+            SDL_Delay(5);
             continue;
         }
 
@@ -158,26 +166,33 @@ int Player::AudioThread(){
     SDL_PauseAudio(0);
     for(;;){
         audioRun = true;
-        if(this->state == FINISH && this->state == FINISH){
+        if(this->state == FINISH && this->AudioQueue.GetSize() == 0){
             printf("AudioFinishPlay\n");
             fflush(NULL);
             pthread_cond_wait(&Cond,&Mut);
             pthread_mutex_unlock(&Mut);
         }
 
-        if(this->state == SEEK || this->state == STOP){
-            printf("AudioWait\n");
+        if(this->state == SEEK){
+            audioRun = false;
+            pthread_cond_signal(&Cond);
+            // 等待完成Seek操作
+            pthread_cond_wait(&RunCond,&RunMut);
+            pthread_mutex_unlock(&RunMut);
+            audioRun = true;
+            printf("AudioThread WakeUp\n");
             fflush(NULL);
+        }
+        else if(this->state == STOP){
             pthread_cond_wait(&Cond,&Mut);
             pthread_mutex_unlock(&Mut);
-            printf("Audio WakeUp\n");
-            fflush(NULL);
         }
         else if(this->state == EXIT){
 
         }
-        else if(this->AudioQueue.GetSize() == 0){
-            SDL_Delay(100);
+        
+        if(this->AudioQueue.GetSize() == 0){
+            SDL_Delay(5);
             continue;
         }
 
@@ -200,18 +215,23 @@ int Player::ReadThread(){
         if(this->state == EXIT){
             break;
         }
-        else if(this->state == STOP || this->state == SEEK){
-            printf("ReadWait\n");
-            fflush(NULL);
-            //等待被唤醒
-            pthread_cond_wait(&Cond,&Mut);
-            pthread_mutex_unlock(&Mut);
-            printf("ReadWakeUp\n");
+        else if(this->state == SEEK){
+            readRun = false;
+            pthread_cond_signal(&Cond);
+            // 等待完成Seek操作
+            pthread_cond_wait(&RunCond,&RunMut);
+            pthread_mutex_unlock(&RunMut);
+            readRun = true;
+            printf("ReadThread WakeUp\n");
             fflush(NULL);
         }
-        if(AudioQueue.GetSize() >= 200 || VideoQueue.GetSize() >= 200){
+        else if(this->state == STOP){
+            pthread_cond_wait(&Cond,&Mut);
+            pthread_mutex_unlock(&Mut);
+        }
+        if(AudioQueue.GetSize() >= 50 || VideoQueue.GetSize() >= 50){
             //队列满了，等待消耗然后在接着运行
-            SDL_Delay(100);
+            SDL_Delay(10);
         }
 
         AVPacket* pkt = (AVPacket*)malloc(sizeof(AVPacket));
@@ -314,15 +334,13 @@ void Player::ShowPicture(AVFrame* frame){
     updateYUVFrame->chromaR.dataBuffer= (unsigned char*)malloc(1280*720/4);
 
     copyDecodedFrame420(frame->data[0],updateYUVFrame->luma.dataBuffer,frame->linesize[0],
-              vCodecCtx->width,vCodecCtx->height);
+              1280,720);
     copyDecodedFrame420(frame->data[1], updateYUVFrame->chromaB.dataBuffer,frame->linesize[1],
-              vCodecCtx->width / 2,vCodecCtx->height / 2);
+              1280 / 2,720 / 2);
     copyDecodedFrame420(frame->data[2], updateYUVFrame->chromaR.dataBuffer,frame->linesize[2],
-              vCodecCtx->width / 2,vCodecCtx->height / 2);
-    printf("FrameWidth: %d  FrameHeight: %d\n",vCodecCtx->width,vCodecCtx->height);
-    fflush(NULL);
-    updateYUVFrame->width=vCodecCtx->width;
-    updateYUVFrame->height=vCodecCtx->height;
+              1280 / 2,720 / 2);
+    updateYUVFrame->width=1280;
+    updateYUVFrame->height=720;
 
     // 开始进行渲染
     this->RenderCallback(updateYUVFrame);
@@ -472,10 +490,10 @@ void Player::Exit(){
 
 void Player::Seek(int Pos){
     this->state = SEEK;
-    while(videoRun == true){
-        SDL_Delay(5);
-    }
     //需要等待所有的线程都阻塞了才能进行seek操作
+    while(videoRun || audioRun || readRun){
+        pthread_cond_wait(&Cond,&Mut);
+    }
     // 关闭音频播放
     SDL_PauseAudio(1);
     // 清空音频当前播放的数据
@@ -500,7 +518,7 @@ void Player::Seek(int Pos){
     doSeek = true;
     SDL_PauseAudio(0);
     this->state = PLAYER;
-    pthread_cond_broadcast(&Cond);
+    pthread_cond_broadcast(&RunCond);
     printf("Finish seek\n");
     fflush(NULL);
 }

@@ -1,6 +1,5 @@
-QT       += core gui
-
-greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
+QT += core gui widgets opengl
+greaterThan(QT_MAJOR_VERSION, 4): QT += openglwidgets widgets
 
 CONFIG += c++11
 
@@ -40,4 +39,5 @@ LIBS += ../ffmpeg-master-latest-win64-gpl-shared/lib/avcodec.lib \
 
 DISTFILES += \
     ../MediaV2-Build/fragment.frag \
-    ../MediaV2-Build/vertex.vert
+    ../MediaV2-Build/vertex.vert \
+    ../build-MediaV2/fragment.frag

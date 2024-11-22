@@ -59,9 +59,6 @@ void CCOpenGLWidget::RendVideo(H264YUV_Frame* yuvFrame)
     m_yFrameLength = yuvFrame->luma.length;
     m_uFrameLength = yuvFrame->chromaB.length;
     m_vFrameLength = yuvFrame->chromaR.length;
-    printf("Width: %d   Height: %d\n",m_nVideoW,m_nVideoH);
-    fflush(NULL);
-    printf("Y: %d  U: %d  V: %d\n");
 
     //申请内存存一帧yuv图像数据,其大小为分辨率的1.5倍
     int nLen = m_yFrameLength + m_uFrameLength +m_vFrameLength;
@@ -90,7 +87,7 @@ void CCOpenGLWidget::initializeGL()
     initializeOpenGLFunctions();
 
     glEnable(GL_DEPTH_TEST);
-    glClearColor(0.0,0.0,0.0,1.0);//设置背景色
+    glClearColor(0.5,0.5,0.5,1.0);//设置背景色
 
     glGenTextures(3, m_textures);
 
@@ -156,7 +153,6 @@ void CCOpenGLWidget::resizeGL(int w, int h)
     glViewport(0,0, w,h);
 }
 
-
 // 渲染OpenGL内容
 void CCOpenGLWidget::paintGL()
 {
@@ -172,10 +168,10 @@ void CCOpenGLWidget::paintGL()
 
     // 定义一个包含顶点位置和纹理坐标数据的数组
     static CCVertex triangleVert[] = {
-        {-1, 1,  1,     0,0}, // 左上角顶点
-        {-1, -1, 1,    0,1}, // 左下角顶点
+        {-1, 1,  0,     0,0}, // 左上角顶点
+        {-1, -1, 0,    0,1}, // 左下角顶点
         {1,  1,  1,     1,0}, // 右上角顶点
-        {1,  -1, 1,    1,1}  // 右下角顶点
+        {1,  -1, -1,    1,1}  // 右下角顶点
     };
 
     // 创建一个变换矩阵，用于对渲染的物体进行变换操作
@@ -183,7 +179,7 @@ void CCOpenGLWidget::paintGL()
     // 设置正交投影，定义视场和远近裁剪面
     matrix.ortho(-1,1,-1,1,0.1,1000);
     // 将物体沿Z轴负方向移动，以便在摄像机前渲染
-    matrix.translate(0,0,-3);
+    matrix.translate(0,0,-2);
 
     // 绑定着色器程序，以便使用定义好的顶点着色器和片段着色器
     m_pShaderProgram->bind();

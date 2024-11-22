@@ -1,7 +1,6 @@
 #ifndef CCOPENGLWIDGET_H
 #define CCOPENGLWIDGET_H
-
-#include <QOpenGLWidget>
+#include <QtOpenGLWidgets/QtOpenGLWidgets>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLFunctions>
 
@@ -69,12 +68,12 @@ private:
 
     uint m_nVideoW       =0; //视频分辨率宽
     uint m_nVideoH       =0; //视频分辨率高
-    uint m_yFrameLength  =0;
-    uint m_uFrameLength  =0;
-    uint m_vFrameLength  =0;
+    uint m_yFrameLength  =0; //y分量的字节数
+    uint m_uFrameLength  =0; //u分量的字节数
+    uint m_vFrameLength  =0; //v分量的字节数
 
     unsigned char* m_pBufYuv420p = NULL;
-
+    // x，y，z坐标  u，v坐标
     struct CCVertex{
         float x,y,z;
         float u,v;

@@ -126,9 +126,12 @@ private:
     SDL_AudioSpec spec;
 
     bool doSeek = false;
-
+    // 用于进入阻塞的条件变量和锁
     pthread_mutex_t Mut;
     pthread_cond_t Cond;
+    // 用于退出阻塞的条件变量和锁
+    pthread_mutex_t RunMut;
+    pthread_mutex_t RunCond;
 
     //用于seek后的音视频同步的信号量
     pthread_mutex_t timeMut;
